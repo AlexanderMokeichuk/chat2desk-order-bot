@@ -35,6 +35,12 @@ export default [
     },
   },
   {
+    files: ['src/scripts/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     ignores: ['node_modules', 'dist', 'coverage'],
   },
 ];
