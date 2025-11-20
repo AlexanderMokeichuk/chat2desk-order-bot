@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.env
+.env.local
+*.log
+logs/
+coverage/
+.vscode
+.idea
+README.md
+.prettierrc
+.prettierignore
+eslint.config.js
