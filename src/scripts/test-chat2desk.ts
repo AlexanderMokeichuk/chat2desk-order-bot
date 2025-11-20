@@ -22,7 +22,9 @@ async function testChat2DeskService() {
 
   for (let i = 1; i <= 7; i++) {
     const canMake = rateLimiter.canMakeRequest();
-    logger.info(`Request ${i}: Can make? ${canMake}, Current count: ${rateLimiter.getCurrentCount()}`);
+    logger.info(
+      `Request ${i}: Can make? ${canMake}, Current count: ${rateLimiter.getCurrentCount()}`
+    );
 
     if (canMake) {
       rateLimiter.recordRequest();
