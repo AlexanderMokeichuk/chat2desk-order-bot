@@ -23,4 +23,5 @@ logs/
 coverage/
 
 # Bun
-.bun/
+.bun/.vscode/
+.vscode/
