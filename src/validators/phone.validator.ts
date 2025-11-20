@@ -8,7 +8,7 @@
  * - +996555123456 → +996555123456
  */
 export function normalizePhone(phone: string): string | null {
-  let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  let cleaned = phone.replace(/[\s\-()]/g, '');
 
   if (cleaned.match(/^\d{9}$/)) {
     cleaned = '+996' + cleaned;
