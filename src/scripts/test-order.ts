@@ -46,8 +46,8 @@ async function testOrderService() {
       bottlesCount: 100,
       chat2deskClientId: 'test',
     });
-  } catch (error: any) {
-    logger.info('Validation error caught (expected):', error.message);
+  } catch (error: unknown) {
+    logger.info('Validation error caught (expected):', (error as Error).message);
   }
 
   logger.info('\n=== Order Service Tests Completed ===');
