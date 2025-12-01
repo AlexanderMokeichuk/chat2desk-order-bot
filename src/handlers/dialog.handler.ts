@@ -1,8 +1,8 @@
 import { StateService } from '@services/state/state.service';
 import { Chat2DeskService } from '@services/chat2desk/chat2desk.service';
 import { OrderService } from '@services/order/order.service';
-import { validatePhone, validateAddress, validateBottles } from '@/validators';
-import { DialogState, DialogContext } from '@/types';
+import { validateAddress, validatePhone, validateQuantity } from '@/validators';
+import { DialogContext, DialogState } from '@/types';
 import { logger } from '@utils/logger';
 
 export class DialogHandler {
@@ -40,8 +40,8 @@ export class DialogHandler {
           await this.handlePhone(clientId, messageText, context);
           break;
 
-        case DialogState.WAITING_BOTTLES:
-          await this.handleBottles(clientId, messageText, context);
+        case DialogState.WAITING_QUANTITY:
+          await this.handleQuantity(clientId, messageText, context);
           break;
 
         case DialogState.WAITING_CONFIRMATION:
@@ -52,7 +52,7 @@ export class DialogHandler {
           logger.warn(`Unknown state: ${context.state} for client ${clientId}`);
           await this.chat2deskService.sendMessage(
             clientId,
-            'Произошла ошибка. Начните заново, напишите "Привет"'
+            'An error occurred. Please start over by sending "Hello"'
           );
           await this.stateService.deleteContext(clientId);
       }
@@ -60,7 +60,7 @@ export class DialogHandler {
       logger.error(`Error processing message for ${clientId}:`, error);
       await this.chat2deskService.sendMessage(
         clientId,
-        'Произошла ошибка. Попробуйте позже или позвоните нам.'
+        'An error occurred. Please try again later or contact us.'
       );
     }
   }
@@ -75,7 +75,7 @@ export class DialogHandler {
   ): Promise<void> {
     await this.chat2deskService.sendMessage(
       clientId,
-      'Здравствуйте! Я помогу вам оформить заказ на доставку воды Shoro.\n\nУкажите, пожалуйста, адрес доставки.'
+      'Hello! I will help you place an order.\n\nPlease provide your delivery address.'
     );
 
     await this.stateService.updateContext(clientId, {
@@ -108,7 +108,7 @@ export class DialogHandler {
 
     await this.chat2deskService.sendMessage(
       clientId,
-      'Отлично! Теперь укажите контактный номер телефона.'
+      'Great! Now please provide your contact phone number.'
     );
   }
 
@@ -128,7 +128,7 @@ export class DialogHandler {
     }
 
     await this.stateService.updateContext(clientId, {
-      state: DialogState.WAITING_BOTTLES,
+      state: DialogState.WAITING_QUANTITY,
       data: {
         ...context.data,
         phone: validation.normalized!,
@@ -137,19 +137,19 @@ export class DialogHandler {
 
     await this.chat2deskService.sendMessage(
       clientId,
-      'Сколько бутылей воды вы хотите заказать? (от 1 до 50)'
+      'How many items would you like to order? (from 1 to 50)'
     );
   }
 
   /**
-   * Handle bottles count input
+   * Handle quantity input
    */
-  private async handleBottles(
+  private async handleQuantity(
     clientId: string,
     messageText: string,
     context: DialogContext
   ): Promise<void> {
-    const validation = validateBottles(messageText);
+    const validation = validateQuantity(messageText);
 
     if (!validation.isValid) {
       await this.chat2deskService.sendMessage(clientId, validation.error!);
@@ -160,18 +160,18 @@ export class DialogHandler {
       state: DialogState.WAITING_CONFIRMATION,
       data: {
         ...context.data,
-        bottlesCount: validation.count!,
+        quantity: validation.count!,
       },
     });
 
     const summary = `
-Проверьте данные заказа:
+Please confirm your order details:
 
-📍 Адрес: ${context.data.address}
-📞 Телефон: ${context.data.phone}
-💧 Количество: ${validation.count} ${this.getBottlesWord(validation.count!)}
+📍 Address: ${context.data.address}
+📞 Phone: ${context.data.phone}
+📦 Quantity: ${validation.count}
 
-Всё верно? (Да/Нет)
+Is everything correct? (Yes/No)
     `.trim();
 
     await this.chat2deskService.sendMessage(clientId, summary);
@@ -192,13 +192,13 @@ export class DialogHandler {
         const order = await this.orderService.createOrder({
           clientPhone: context.data.phone!,
           deliveryAddress: context.data.address!,
-          bottlesCount: context.data.bottlesCount!,
+          quantity: context.data.quantity!,
           chat2deskClientId: clientId,
         });
 
         await this.chat2deskService.sendMessage(
           clientId,
-          `✅ Заказ №${order.id} успешно оформлен!\n\nДоставка воды в течение 2-4 часов.\n\nСпасибо за заказ! 💧`
+          `✅ Order #${order.id} has been successfully placed!\n\nDelivery within 2-4 hours.\n\nThank you for your order!`
         );
 
         await this.stateService.deleteContext(clientId);
@@ -208,19 +208,19 @@ export class DialogHandler {
         logger.error(`Failed to create order for ${clientId}:`, error);
         await this.chat2deskService.sendMessage(
           clientId,
-          'Произошла ошибка при оформлении заказа. Пожалуйста, попробуйте позже или позвоните нам.'
+          'An error occurred while placing your order. Please try again later or contact us.'
         );
       }
     } else if (this.isNegativeResponse(response)) {
       await this.stateService.deleteContext(clientId);
       await this.chat2deskService.sendMessage(
         clientId,
-        'Заказ отменён. Напишите снова, когда захотите оформить новый заказ.'
+        'Order cancelled. Feel free to place a new order anytime.'
       );
 
       logger.info(`Order cancelled by client ${clientId}`);
     } else {
-      await this.chat2deskService.sendMessage(clientId, 'Пожалуйста, ответьте "Да" или "Нет"');
+      await this.chat2deskService.sendMessage(clientId, 'Please answer "Yes" or "No"');
     }
   }
 
@@ -228,7 +228,7 @@ export class DialogHandler {
    * Check if response is positive
    */
   private isPositiveResponse(response: string): boolean {
-    const positiveWords = ['да', 'yes', 'ага', 'угу', '+', 'конечно', 'верно', 'правильно'];
+    const positiveWords = ['yes', 'y', 'yeah', 'yep', 'sure', 'ok', 'correct', '+'];
     return positiveWords.some((word) => response.includes(word));
   }
 
@@ -236,20 +236,7 @@ export class DialogHandler {
    * Check if response is negative
    */
   private isNegativeResponse(response: string): boolean {
-    const negativeWords = ['нет', 'no', 'не', '-', 'отмена', 'cancel'];
+    const negativeWords = ['no', 'n', 'nope', 'cancel', '-'];
     return negativeWords.some((word) => response.includes(word));
-  }
-
-  /**
-   * Get correct word form for bottles
-   */
-  private getBottlesWord(count: number): string {
-    if (count === 1) {
-      return 'бутыль';
-    } else if (count >= 2 && count <= 4) {
-      return 'бутыли';
-    } else {
-      return 'бутылей';
-    }
   }
 }
