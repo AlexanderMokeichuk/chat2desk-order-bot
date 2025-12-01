@@ -11,12 +11,12 @@ CREATE TABLE IF NOT EXISTS orders
     20
 ) NOT NULL,
     delivery_address TEXT NOT NULL,
-    bottles_count INTEGER NOT NULL CHECK
+    quantity INTEGER NOT NULL CHECK
 (
-    bottles_count >
+    quantity >
     0
     AND
-    bottles_count
+    quantity
     <=
     50
 ),
