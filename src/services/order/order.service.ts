@@ -19,7 +19,7 @@ export class OrderService {
       const order = await this.repository.create(dto);
 
       logger.info(
-        `Order created successfully: #${order.id} for ${dto.chat2deskClientId}, ${dto.bottlesCount} bottles`
+        `Order created successfully: #${order.id} for ${dto.chat2deskClientId}, quantity: ${dto.bottlesCount}`
       );
 
       return order;
