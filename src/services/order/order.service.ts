@@ -1,6 +1,6 @@
-import { OrderRepository } from './order.repository';
 import { CreateOrderDto, Order } from '@/types';
 import { logger } from '@utils/logger';
+import { OrderRepository } from '@/services';
 
 export class OrderService {
   private repository: OrderRepository;
@@ -19,7 +19,7 @@ export class OrderService {
       const order = await this.repository.create(dto);
 
       logger.info(
-        `Order created successfully: #${order.id} for ${dto.chat2deskClientId}, quantity: ${dto.bottlesCount}`
+        `Order created successfully: #${order.id} for ${dto.chat2deskClientId}, quantity: ${dto.quantity}`
       );
 
       return order;
@@ -55,8 +55,8 @@ export class OrderService {
       throw new Error('Delivery address is required');
     }
 
-    if (!dto.bottlesCount || dto.bottlesCount < 1 || dto.bottlesCount > 50) {
-      throw new Error('Bottles count must be between 1 and 50');
+    if (!dto.quantity || dto.quantity < 1 || dto.quantity > 50) {
+      throw new Error('Quantity must be between 1 and 50');
     }
 
     if (!dto.chat2deskClientId || dto.chat2deskClientId.trim().length === 0) {

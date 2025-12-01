@@ -1,5 +1,5 @@
 import { pool } from '@config/database.config';
-import { Order, CreateOrderDto, OrderStatus } from '@/types';
+import { CreateOrderDto, Order, OrderStatus } from '@/types';
 import { logger } from '@utils/logger';
 
 export class OrderRepository {
@@ -10,7 +10,7 @@ export class OrderRepository {
     const query = `
         INSERT INTO orders (client_phone,
                             delivery_address,
-                            bottles_count,
+                            quantity,
                             source,
                             chat2desk_client_id,
                             status)
@@ -20,7 +20,7 @@ export class OrderRepository {
     const values = [
       dto.clientPhone,
       dto.deliveryAddress,
-      dto.bottlesCount,
+      dto.quantity,
       'chat2desk_bot',
       dto.chat2deskClientId,
       OrderStatus.NEW,
@@ -107,7 +107,7 @@ export class OrderRepository {
       id: row.id,
       clientPhone: row.client_phone,
       deliveryAddress: row.delivery_address,
-      bottlesCount: row.bottles_count,
+      quantity: row.quantity,
       source: row.source,
       chat2deskClientId: row.chat2desk_client_id,
       status: row.status as OrderStatus,
