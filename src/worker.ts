@@ -6,7 +6,7 @@ import { redis } from '@config/redis.config';
 
 async function startWorker() {
   try {
-    logger.info('Starting Shoro Chat2Desk Bot Worker...');
+    logger.info('Starting Chat2Desk Order Bot Worker...');
 
     const dbOk = await testDatabaseConnection();
     if (!dbOk) {

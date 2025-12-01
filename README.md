@@ -1,145 +1,145 @@
-# Shoro Chat2Desk Bot
+# 🤖 Chat2Desk Order Bot
 
-Автоматизированный бот для приёма заказов на доставку воды Shoro через Chat2Desk.
+<div align="center">
 
-## 🚀 Возможности
+**Production-ready chatbot for automating order processing via Chat2Desk API**
 
-- ✅ Автоматический приём заказов через чаты (WhatsApp, Telegram, и др.)
-- ✅ Валидация данных (адрес, телефон, количество)
-- ✅ Создание заказов в базе данных
-- ✅ Отказоустойчивая архитектура с очередями
-- ✅ Идемпотентность обработки сообщений
-- ✅ Поддержка до 300+ заказов в день
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0+-black.svg)](https://bun.sh/)
+[![Redis](https://img.shields.io/badge/Redis-7.0-red.svg)](https://redis.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 📋 Требования
+[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [Documentation](#-documentation)
 
-- Bun 1.0+
-- Docker & Docker Compose
-- PostgreSQL 15+
-- Redis 7+
-- Chat2Desk аккаунт с API токеном
+</div>
 
-## ⚡ Быстрый старт
+---
 
-### 1. Клонирование репозитория
+## 🎯 Features
 
+- ✨ **Automated Order Processing** - Handle customer orders via chat (WhatsApp, Telegram, etc.)
+- 🔄 **State Machine Dialog** - Smart conversation flow with 5 states
+- ✅ **Data Validation** - Address, phone number, and quantity validation
+- 🛡️ **Fault-Tolerant** - Retry mechanisms, idempotency, queue-based architecture
+- ⚡ **High Performance** - 2-5ms response time, 300+ orders/day capacity
+- 📊 **Production Ready** - Graceful shutdown, health checks, comprehensive logging
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) 1.0+
+- [Docker](https://www.docker.com/) & Docker Compose
+- [Chat2Desk](https://chat2desk.com/) account with API token
+
+### Installation
 ```bash
-git clone <repository-url>
-cd shoro-chat2desk-bot
-```
+# Clone the repository
+git clone https://github.com/AlexanderMokeichuk/chat2desk-order-bot.git
+cd chat2desk-order-bot
 
-### 2. Установка зависимостей
-
-```bash
+# Install dependencies
 bun install
-```
 
-### 3. Настройка окружения
-
-```bash
+# Setup environment
 cp .env.example .env
-# Отредактируй .env и добавь свой CHAT2DESK_API_TOKEN
+# Edit .env and add your CHAT2DESK_API_TOKEN
 ```
 
-### 4. Запуск инфраструктуры
-
+### Running
 ```bash
-# Запуск Redis и PostgreSQL
+# Start infrastructure (Redis + PostgreSQL)
 bun run docker:up
-```
 
-### 5. Запуск бота
-
-```bash
-# Терминал 1: Webhook сервер
+# Terminal 1: Start webhook server
 bun run dev:server
 
-# Терминал 2: Worker
+# Terminal 2: Start worker
 bun run dev:worker
 ```
 
-## 📦 Production деплой
-
+### Testing
 ```bash
-# Билд проекта
-bun run build
+# Send test webhook
+curl -X POST http://localhost:3000/webhook/chat2desk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "test_user",
+    "message_id": "msg_001",
+    "text": "Hello"
+  }'
 
-# Запуск
-bun run start:server  # Webhook сервер
-bun run start:worker  # Worker
+# Check health
+curl http://localhost:3000/health
 ```
 
-## 🏗️ Архитектура
-
+## 🏗️ Architecture
 ```
 Chat2Desk → Webhook Server → Redis Queue → Workers → PostgreSQL
                                   ↓
                           State Management (Redis)
 ```
 
-**Компоненты:**
+### Components
 
-- **Webhook Server** - Принимает webhooks от Chat2Desk (Bun.serve)
-- **Message Queue** - Буферизация сообщений (Bull + Redis)
-- **Workers** - Обработка сообщений с диалогом (5 параллельных процессов)
-- **State Management** - Хранение состояния диалогов (Redis, TTL 24ч)
-- **PostgreSQL** - Хранение заказов
+- **Webhook Server** - Receives webhooks from Chat2Desk (Bun.serve, 2-5ms response)
+- **Message Queue** - Buffers messages for processing (Bull + Redis)
+- **Workers** - Processes messages with dialog logic (configurable concurrency)
+- **State Management** - Stores conversation state (Redis, 24h TTL)
+- **PostgreSQL** - Persists orders
 
-## 📝 Переменные окружения
-
-| Переменная            | Описание             | Пример          |
-|-----------------------|----------------------|-----------------|
-| `PORT`                | Порт webhook сервера | `3000`          |
-| `REDIS_HOST`          | Хост Redis           | `localhost`     |
-| `DATABASE_HOST`       | Хост PostgreSQL      | `localhost`     |
-| `DATABASE_NAME`       | Имя БД               | `shoro_bot_dev` |
-| `CHAT2DESK_API_TOKEN` | API токен Chat2Desk  | `your_token`    |
-| `WORKER_CONCURRENCY`  | Параллельные workers | `5`             |
-| `LOG_LEVEL`           | Уровень логов        | `info`          |
-
-Полный список: см. `.env.example`
-
-## 🔧 Полезные команды
-
-```bash
-# Разработка
-bun run dev:server      # Запуск webhook сервера
-bun run dev:worker      # Запуск worker
-
-# Production
-bun run start:server    # Запуск prod сервера
-bun run start:worker    # Запуск prod worker
-
-# Docker
-bun run docker:up       # Запуск Redis + PostgreSQL
-bun run docker:down     # Остановка
-bun run docker:logs     # Просмотр логов
-bun run docker:clean    # Полная очистка (удалит данные!)
-
-# Качество кода
-bun run lint            # Проверка ESLint
-bun run format          # Форматирование Prettier
-bun run test            # Запуск тестов
+### Dialog Flow
+```
+INITIAL → WAITING_ADDRESS → WAITING_PHONE → WAITING_QUANTITY → WAITING_CONFIRMATION → COMPLETED
 ```
 
-## 📊 Endpoints
+Each state validates user input and guides them through the order process.
+
+## 📊 Performance
+
+- **Response Time:** 2-5ms (webhook endpoint)
+- **Processing Time:** ~200ms per message
+- **Throughput:** 60 msg/sec (300+ orders/day)
+- **Concurrency:** 5 workers (scalable to 50+)
+- **Fault Tolerance:** 3 retries with exponential backoff
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Webhook server port | `3000` |
+| `REDIS_HOST` | Redis hostname | `localhost` |
+| `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
+| `CHAT2DESK_API_TOKEN` | Chat2Desk API token | *required* |
+| `WORKER_CONCURRENCY` | Worker processes | `5` |
+| `LOG_LEVEL` | Logging level | `info` |
+
+See [`.env.example`](.env.example) for full list.
+
+## 📚 Documentation
+
+- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed system design & components
+- [API Reference](#api-endpoints) - Available endpoints
+
+## 📡 API Endpoints
 
 ### `POST /webhook/chat2desk`
 
-Приём webhooks от Chat2Desk
+Receives webhooks from Chat2Desk.
 
 **Request:**
-
 ```json
 {
-  "client_id": "client_123",
+  "client_id": "user_123",
   "message_id": "msg_001",
-  "text": "Привет"
+  "text": "Hello"
 }
 ```
 
 **Response:**
-
 ```json
 {
   "success": true
@@ -148,10 +148,9 @@ bun run test            # Запуск тестов
 
 ### `GET /health`
 
-Проверка здоровья сервиса
+Health check endpoint.
 
 **Response:**
-
 ```json
 {
   "status": "healthy",
@@ -168,94 +167,69 @@ bun run test            # Запуск тестов
 
 ### `GET /`
 
-Информация о сервере
-
-## 🗂️ Структура проекта
-
-```
-src/
-├── config/           # Конфигурация (env, redis, database)
-├── handlers/         # Dialog handler (логика диалога)
-├── queues/           # Bull очереди (message, outbox)
-├── services/
-│   ├── chat2desk/    # Chat2Desk API client
-│   ├── order/        # Order service + repository
-│   └── state/        # State management
-├── types/            # TypeScript типы
-├── utils/            # Утилиты (logger)
-├── validators/       # Валидаторы (адрес, телефон, количество)
-├── workers/          # Message worker
-├── server.ts         # Webhook server entry point
-└── worker.ts         # Worker entry point
-```
-
-## 🔄 Логика диалога
-
-Бот ведёт диалог в 5 этапов:
-
-1. **INITIAL** → Приветствие
-2. **WAITING_ADDRESS** → Запрос адреса доставки
-3. **WAITING_PHONE** → Запрос телефона
-4. **WAITING_BOTTLES** → Запрос количества бутылей (1-50)
-5. **WAITING_CONFIRMATION** → Подтверждение заказа
-
-При подтверждении создаётся заказ в БД.
-
-## 🛡️ Отказоустойчивость
-
-- **Retry механизм** - 3 попытки с exponential backoff
-- **Outbox Queue** - неотправленные сообщения повторяются до 50 раз
-- **Идемпотентность** - защита от дублей через Redis (7 дней)
-- **State TTL** - состояния диалогов автоудаляются через 24 часа
-- **Graceful shutdown** - корректное завершение при SIGTERM/SIGINT
-
-## 📈 Производительность
-
-- **Webhook response time:** 2-5ms
-- **Обработка сообщения:** ~200ms
-- **Пропускная способность:** 60 msg/sec (300+ заказов/день)
-- **Concurrency:** 5 параллельных workers (масштабируется до 50+)
+Server information.
 
 ## 🐛 Troubleshooting
 
-### Бот не отвечает на сообщения
+### Bot not responding
 
-1. Проверь Chat2Desk API token в `.env`
-2. Проверь webhook URL в Chat2Desk настройках
-3. Проверь логи: `bun run docker:logs`
+1. Check `CHAT2DESK_API_TOKEN` in `.env`
+2. Verify webhook URL in Chat2Desk settings
+3. Check logs: `docker logs bot-redis`
 
-### Ошибка подключения к Redis/PostgreSQL
-
+### Connection errors
 ```bash
-# Проверь что контейнеры запущены
-docker ps
-
-# Перезапусти
+# Restart infrastructure
 bun run docker:down
 bun run docker:up
 ```
 
-### Сообщения не обрабатываются
-
+### Messages not processing
 ```bash
-# Проверь размер очереди
-docker exec -it shoro-redis redis-cli
+# Check queue size
+docker exec -it bot-redis redis-cli
 > LLEN bull:messages:wait
-
-# Проверь логи worker
-bun run dev:worker
 ```
 
-## 📚 Дополнительная документация
+## 🤝 Contributing
 
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Детальная архитектура
-- [DEVELOPMENT.md](docs/DEVELOPMENT.md) - Гайд для разработчиков
-- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Production деплой
+Contributions are welcome! Please check out the [Contributing Guide](CONTRIBUTING.md).
 
-## 📄 Лицензия
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-MIT
+## 💰 Support
 
-## 👤 Автор
+If you find this project helpful, consider supporting:
 
-Alexander Mokeichuk - Frontend/Fullstack Developer @ Shoro
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-yellow.svg)](https://www.buymeacoffee.com/YOUR_USERNAME)
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [Bun](https://bun.sh/) - Fast JavaScript runtime
+- Queue powered by [Bull](https://github.com/OptimalBits/bull)
+- Integrated with [Chat2Desk](https://chat2desk.com/) API
+
+## 👤 Author
+
+**Alexander Mokeichuk**
+
+- GitHub: [@AlexanderMokeichuk](https://github.com/AlexanderMokeichuk)
+- LinkedIn: [Alexander Mokeichuk](https://www.linkedin.com/in/alexander-mokeichuk-b36212324/)
+
+---
+
+<div align="center">
+
+**⭐ Star this repo if you find it useful!**
+
+Made with ❤️ and TypeScript
+
+</div>

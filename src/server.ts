@@ -14,7 +14,7 @@ interface WebhookBody {
 
 async function startServer() {
   try {
-    logger.info('Starting Shoro Chat2Desk Bot Server...');
+    logger.info('Starting Chat2Desk Order Bot Server...');
 
     const dbOk = await testDatabaseConnection();
     if (!dbOk) {
@@ -38,7 +38,7 @@ async function startServer() {
           if (url.pathname === '/' && req.method === 'GET') {
             response = new Response(
               JSON.stringify({
-                name: 'Shoro Chat2Desk Bot',
+                name: 'Chat2Desk Order Bot',
                 version: '0.1.0',
                 status: 'running',
               }),

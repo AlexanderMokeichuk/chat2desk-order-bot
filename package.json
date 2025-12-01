@@ -1,7 +1,7 @@
 {
-  "name": "shoro-chat2desk-bot",
+  "name": "chat2desk-order-bot",
   "version": "0.1.0",
-  "description": "Automated water delivery order bot for Shoro via Chat2Desk",
+  "description": "Production-ready chatbot for automating order processing via Chat2Desk API",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {

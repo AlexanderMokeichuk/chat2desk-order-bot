@@ -1,11 +1,11 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: shoro-redis
+    container_name: bot-redis
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - bot_redis_data:/data
     command: redis-server --appendonly yes
     restart: unless-stopped
     healthcheck:
@@ -16,15 +16,15 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: shoro-postgres
+    container_name: bot-postgres
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
-      POSTGRES_DB: ${DATABASE_NAME:-shoro_bot_dev}
+      POSTGRES_DB: ${DATABASE_NAME:-order_bot_dev}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - bot_postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
@@ -34,5 +34,5 @@ services:
       retries: 5
 
 volumes:
-  redis_data:
-  postgres_data:
+  bot_redis_data:
+  bot_postgres_data:
