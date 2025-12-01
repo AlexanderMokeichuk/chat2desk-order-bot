@@ -13,7 +13,7 @@ export function validateAddress(address: string): AddressValidationResult {
   if (!address || address.trim().length === 0) {
     return {
       isValid: false,
-      error: 'Адрес не может быть пустым',
+      error: 'Address cannot be empty',
     };
   }
 
@@ -22,14 +22,14 @@ export function validateAddress(address: string): AddressValidationResult {
   if (trimmed.length < 5) {
     return {
       isValid: false,
-      error: 'Адрес слишком короткий. Укажите полный адрес доставки',
+      error: 'Address is too short. Please provide full delivery address',
     };
   }
 
   if (trimmed.length > 200) {
     return {
       isValid: false,
-      error: 'Адрес слишком длинный',
+      error: 'Address is too long',
     };
   }
 

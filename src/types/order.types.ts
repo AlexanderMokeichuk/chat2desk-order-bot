@@ -14,7 +14,7 @@ export enum OrderStatus {
 export interface CreateOrderDto {
   clientPhone: string;
   deliveryAddress: string;
-  bottlesCount: number;
+  quantity: number;
   chat2deskClientId: string;
 }
 
@@ -25,7 +25,7 @@ export interface Order {
   id: number;
   clientPhone: string;
   deliveryAddress: string;
-  bottlesCount: number;
+  quantity: number;
   source: string;
   chat2deskClientId: string;
   status: OrderStatus;

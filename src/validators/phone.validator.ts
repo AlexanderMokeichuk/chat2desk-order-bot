@@ -1,5 +1,5 @@
 /**
- * Normalize phone number to +996XXXXXXXXX format
+ * Normalize phone number to international format
  *
  * Accepts formats:
  * - 555123456 → +996555123456
@@ -49,7 +49,7 @@ export function validatePhone(phone: string): PhoneValidationResult {
   if (!phone || phone.trim().length === 0) {
     return {
       isValid: false,
-      error: 'Телефон не может быть пустым',
+      error: 'Phone number cannot be empty',
     };
   }
 
@@ -58,7 +58,7 @@ export function validatePhone(phone: string): PhoneValidationResult {
   if (!normalized) {
     return {
       isValid: false,
-      error: 'Неверный формат телефона. Пример: +996555123456 или 0555123456',
+      error: 'Invalid phone format. Example: +996555123456 or 0555123456',
     };
   }
 
