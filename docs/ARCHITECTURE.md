@@ -153,7 +153,7 @@ COMPLETED
   {
     address ? : string,
       phone ? : string,
-      bottlesCount ? : number
+      quantity ? : number
   }
 ,
   createdAt: number,
@@ -291,7 +291,7 @@ Checks:
 
 **orders** - Customer orders
 
-- id, client_phone, delivery_address, bottles_count
+- id, client_phone, delivery_address, quantity
 - source, chat2desk_client_id, status
 - created_at, updated_at
 
