@@ -7,7 +7,7 @@ import { outboxQueue } from '@/queues';
 export class Chat2DeskService {
   private client: AxiosInstance;
   private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000; // 1 second
+  private readonly RETRY_DELAY = 1000;
 
   constructor() {
     this.client = axios.create({
