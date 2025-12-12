@@ -33,7 +33,7 @@ export class Chat2DeskService {
       try {
         const response = await this.client.post<Chat2DeskResponse>('/messages', message);
 
-        if (response.data.success) {
+        if (response.data.status === 'success' || response.status === 200) {
           logger.debug(`Message sent to ${clientId}`);
           return true;
         }

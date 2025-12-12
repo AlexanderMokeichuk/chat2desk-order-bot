@@ -59,7 +59,7 @@ export class OrderService {
       throw new Error('Quantity must be between 1 and 50');
     }
 
-    if (!dto.chat2deskClientId || dto.chat2deskClientId.trim().length === 0) {
+    if (!dto.chat2deskClientId || String(dto.chat2deskClientId).trim().length === 0) {
       throw new Error('Chat2Desk client ID is required');
     }
   }
