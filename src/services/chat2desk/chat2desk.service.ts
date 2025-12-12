@@ -15,7 +15,7 @@ export class Chat2DeskService {
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.CHAT2DESK_API_TOKEN}`,
+        Authorization: config.CHAT2DESK_API_TOKEN,
       },
     });
   }
