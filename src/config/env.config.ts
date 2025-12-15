@@ -14,6 +14,7 @@ interface EnvConfig {
   CHAT2DESK_WEBHOOK_SECRET?: string;
   LOG_LEVEL: string;
   WORKER_CONCURRENCY: number;
+  RABBITMQ_URL: string;
 }
 
 function validateEnv(): EnvConfig {
@@ -24,6 +25,7 @@ function validateEnv(): EnvConfig {
     'DATABASE_NAME',
     'DATABASE_USER',
     'CHAT2DESK_API_TOKEN',
+    'RABBITMQ_URL',
   ];
 
   const missing = requiredEnvs.filter((key) => !process.env[key]);
@@ -48,6 +50,7 @@ function validateEnv(): EnvConfig {
     CHAT2DESK_WEBHOOK_SECRET: process.env.CHAT2DESK_WEBHOOK_SECRET,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
     WORKER_CONCURRENCY: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
+    RABBITMQ_URL: process.env.RABBITMQ_URL!,
   };
 }
 
