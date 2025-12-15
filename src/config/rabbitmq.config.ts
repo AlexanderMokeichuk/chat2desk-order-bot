@@ -1,11 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { ChannelModel, Channel } from 'amqplib';
 import amqp from 'amqplib';
 import { config } from './env.config';
 import { logger } from '@utils/logger';
 
 class RabbitMQConnection {
-  private connection: any = null;
-  private channel: any = null;
+  private connection: ChannelModel | null = null;
+  private channel: Channel | null = null;
   private isConnecting = false;
 
   async connect(): Promise<void> {
@@ -66,7 +66,7 @@ class RabbitMQConnection {
     }
   }
 
-  getChannel(): any {
+  getChannel(): Channel {
     if (!this.channel) {
       throw new Error('RabbitMQ channel not initialized. Call connect() first.');
     }
