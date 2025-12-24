@@ -1,5 +1,6 @@
 import { MessageWorker } from '@/workers';
 import { config } from '@config/env.config';
+import { rabbitmq } from '@config/rabbitmq.config';
 import { logger } from '@utils/logger';
 import { testDatabaseConnection } from '@config/database.config';
 import { redis } from '@config/redis.config';
@@ -7,6 +8,8 @@ import { redis } from '@config/redis.config';
 async function startWorker() {
   try {
     logger.info('Starting Chat2Desk Order Bot Worker...');
+
+    await rabbitmq.connect();
 
     const dbOk = await testDatabaseConnection();
     if (!dbOk) {
@@ -30,12 +33,14 @@ async function startWorker() {
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully...');
+  await rabbitmq.close();
   await redis.quit();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully...');
+  await rabbitmq.close();
   await redis.quit();
   process.exit(0);
 });
