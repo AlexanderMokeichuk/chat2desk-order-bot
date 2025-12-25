@@ -21,7 +21,4 @@ logs/
 
 # Testing
 coverage/
-
-# Bun
-.bun/.vscode/
-.vscode/
+-

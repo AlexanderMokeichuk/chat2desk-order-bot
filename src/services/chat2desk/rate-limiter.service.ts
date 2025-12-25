@@ -21,7 +21,6 @@ export class RateLimiter {
     const now = Date.now();
     const windowStart = now - this.window;
 
-    // Remove old requests outside the window
     this.queue = this.queue.filter((timestamp) => timestamp > windowStart);
 
     if (this.queue.length >= this.limit) {

@@ -1,11 +1,10 @@
 /**
- * Message job data for Bull queue
+ * Message job data for queue
  */
 export interface MessageJob {
   clientId: string;
   messageText: string;
   messageId: string;
-  timestamp: number;
 }
 
 /**

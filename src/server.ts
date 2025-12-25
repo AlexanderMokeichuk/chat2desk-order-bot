@@ -1,20 +1,17 @@
-import { messageQueue } from '@/queues';
+import { serve } from 'bun';
 import { config } from '@config/env.config';
+import { rabbitmq } from '@config/rabbitmq.config';
+import { messageQueue } from '@/queues';
 import { logger } from '@utils/logger';
 import { testDatabaseConnection } from '@config/database.config';
 import { redis } from '@config/redis.config';
-import { pool } from '@config/database.config';
-
-interface WebhookBody {
-  client_id: string;
-  text: string;
-  message_id: string;
-  timestamp?: number;
-}
+import type { Chat2DeskWebhook } from '@/types';
 
 async function startServer() {
   try {
     logger.info('Starting Chat2Desk Order Bot Server...');
+
+    await rabbitmq.connect();
 
     const dbOk = await testDatabaseConnection();
     if (!dbOk) {
@@ -23,136 +20,77 @@ async function startServer() {
 
     await redis.ping();
     logger.info('Redis connection OK');
-    Bun.serve({
-      port: config.PORT,
-      hostname: '0.0.0.0',
 
+    serve({
+      port: config.PORT,
       async fetch(req) {
         const url = new URL(req.url);
+        let response: Response;
 
-        const start = Date.now();
+        if (url.pathname === '/webhook/chat2desk' && req.method === 'POST') {
+          try {
+            const body = (await req.json()) as Chat2DeskWebhook;
 
-        try {
-          let response: Response;
+            logger.info(
+              `Received webhook from client ${body.client_id}: "${body.text.substring(0, 20)}..."`
+            );
 
-          if (url.pathname === '/' && req.method === 'GET') {
+            await messageQueue.add({
+              clientId: body.client_id,
+              messageText: body.text,
+              messageId: body.message_id,
+            });
+
+            logger.debug(`Message queued for client ${body.client_id}`);
+
+            response = new Response(JSON.stringify({ success: true }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          } catch (error) {
+            logger.error('Webhook processing error:', error);
             response = new Response(
-              JSON.stringify({
-                name: 'Chat2Desk Order Bot',
-                version: '0.1.0',
-                status: 'running',
-              }),
+              JSON.stringify({ success: false, error: 'Internal server error' }),
               {
+                status: 500,
                 headers: { 'Content-Type': 'application/json' },
               }
             );
-          } else if (url.pathname === '/health' && req.method === 'GET') {
-            const checks = {
-              redis: false,
-              postgres: false,
-              queues: {
-                message: 0,
-                outbox: 0,
-              },
-            };
-
-            try {
-              await redis.ping();
-              checks.redis = true;
-            } catch (err) {
-              logger.error('Redis health check failed:', err);
-            }
-
-            try {
-              await pool.query('SELECT 1');
-              checks.postgres = true;
-            } catch (err) {
-              logger.error('PostgreSQL health check failed:', err);
-            }
-
-            try {
-              checks.queues.message = await messageQueue.count();
-            } catch (err) {
-              logger.error('Queue health check failed:', err);
-            }
-
-            const isHealthy = checks.redis && checks.postgres;
-
-            response = new Response(
-              JSON.stringify({
-                status: isHealthy ? 'healthy' : 'unhealthy',
-                checks,
-                timestamp: new Date().toISOString(),
-              }),
-              {
-                status: isHealthy ? 200 : 503,
-                headers: { 'Content-Type': 'application/json' },
-              }
-            );
-          } else if (url.pathname === '/webhook/chat2desk' && req.method === 'POST') {
-            const body = (await req.json()) as WebhookBody;
-            const { client_id, text, message_id } = body;
-
-            if (!client_id || !text || !message_id) {
-              logger.warn('Invalid webhook payload:', body);
-              response = new Response(
-                JSON.stringify({
-                  success: false,
-                  error: 'Missing required fields',
-                }),
-                {
-                  status: 400,
-                  headers: { 'Content-Type': 'application/json' },
-                }
-              );
-            } else {
-              logger.info(
-                `Received webhook from client ${client_id}: "${text.substring(0, 50)}..."`
-              );
-
-              await messageQueue.add({
-                clientId: client_id,
-                messageText: text,
-                messageId: message_id,
-                timestamp: body.timestamp || Date.now(),
-              });
-
-              logger.debug(`Message queued for client ${client_id}`);
-
-              response = new Response(JSON.stringify({ success: true }), {
-                headers: { 'Content-Type': 'application/json' },
-              });
-            }
-          } else {
-            response = new Response('Not Found', { status: 404 });
           }
 
-          const duration = Date.now() - start;
-          logger.info(`${req.method} ${url.pathname} ${response.status} - ${duration}ms`);
-
+          logger.info(`${req.method} ${url.pathname} ${response.status}`);
           return response;
-        } catch (error) {
-          logger.error('Request error:', error);
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: 'Internal server error',
-            }),
+        } else if (url.pathname === '/health' && req.method === 'GET') {
+          response = new Response(
+            JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }),
             {
-              status: 500,
               headers: { 'Content-Type': 'application/json' },
             }
           );
+          return response;
+        } else if (url.pathname === '/' && req.method === 'GET') {
+          response = new Response(
+            JSON.stringify({
+              name: 'Chat2Desk Order Bot',
+              version: '0.1.0',
+              status: 'running',
+            }),
+            {
+              headers: { 'Content-Type': 'application/json' },
+            }
+          );
+          return response;
         }
+
+        return new Response('Not Found', { status: 404 });
       },
     });
 
     logger.info(`✅ Webhook server started on port ${config.PORT}`);
     logger.info(`Environment: ${config.NODE_ENV}`);
-    logger.info(`Endpoints:`);
-    logger.info(`  POST /webhook/chat2desk - Receive webhooks`);
-    logger.info(`  GET  /health - Health check`);
-    logger.info(`  GET  / - Server info`);
+    logger.info('Endpoints:');
+    logger.info('  POST /webhook/chat2desk - Receive webhooks');
+    logger.info('  GET  /health - Health check');
+    logger.info('  GET  / - Server info');
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
@@ -161,12 +99,14 @@ async function startServer() {
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully...');
+  await rabbitmq.close();
   await redis.quit();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully...');
+  await rabbitmq.close();
   await redis.quit();
   process.exit(0);
 });

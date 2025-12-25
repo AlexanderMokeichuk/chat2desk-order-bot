@@ -1,30 +1,71 @@
-import Queue from 'bull';
-import { redisConfig } from '@config/redis.config';
-import { OutboxJob } from '@/types';
+import { Buffer } from 'node:buffer';
+import { rabbitmq } from '@config/rabbitmq.config';
 import { logger } from '@utils/logger';
+import { OutboxJob } from '@/types';
+import type { ConsumeMessage } from 'amqplib';
 
-/**
- * Outbox queue for retrying failed Chat2Desk API calls
- */
-export const outboxQueue = new Queue<OutboxJob>('outbox', {
-  redis: redisConfig,
-  defaultJobOptions: {
-    attempts: 50,
-    backoff: {
-      type: 'exponential',
-      delay: 60000,
-    },
-    removeOnComplete: 10,
-    removeOnFail: false,
-  },
-});
+export class OutboxQueue {
+  private queueName = 'outbox';
 
-outboxQueue.on('failed', (job, err) => {
-  logger.error(`Outbox job ${job?.id} failed:`, err);
-});
+  async add(job: OutboxJob): Promise<void> {
+    try {
+      const channel = rabbitmq.getChannel();
 
-outboxQueue.on('completed', (job) => {
-  logger.info(`Outbox job ${job.id} completed - message sent successfully`);
-});
+      const message = Buffer.from(JSON.stringify(job));
 
-logger.info('Outbox queue initialized');
+      channel.sendToQueue(this.queueName, message, {
+        persistent: true,
+      });
+
+      logger.debug(`Message added to outbox queue: ${job.clientId}`);
+    } catch (error) {
+      logger.error('Failed to add message to outbox queue:', error);
+      throw error;
+    }
+  }
+
+  async process(concurrency: number, handler: (job: OutboxJob) => Promise<void>): Promise<void> {
+    try {
+      const channel = rabbitmq.getChannel();
+
+      await channel.prefetch(concurrency);
+
+      logger.info(
+        `Starting to consume from ${this.queueName} queue with concurrency ${concurrency}`
+      );
+
+      await channel.consume(this.queueName, async (msg: ConsumeMessage | null) => {
+        if (!msg) return;
+
+        const job: OutboxJob = JSON.parse(msg.content.toString());
+
+        try {
+          await handler(job);
+          channel.ack(msg);
+        } catch (error) {
+          logger.error('Error processing outbox message:', error);
+
+          if (job.attempts >= 50) {
+            logger.error(`Max retries reached for ${job.clientId}, moving to DLQ`);
+
+            const dlqChannel = rabbitmq.getChannel();
+            dlqChannel.sendToQueue('dlq', msg.content, { persistent: true });
+
+            channel.ack(msg);
+          } else {
+            job.attempts += 1;
+            const updatedMessage = Buffer.from(JSON.stringify(job));
+            channel.sendToQueue(this.queueName, updatedMessage, { persistent: true });
+
+            channel.ack(msg);
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Failed to process outbox messages:', error);
+      throw error;
+    }
+  }
+}
+
+export const outboxQueue = new OutboxQueue();

@@ -15,7 +15,7 @@ export interface CreateOrderDto {
   clientPhone: string;
   deliveryAddress: string;
   quantity: number;
-  chat2deskClientId: string;
+  chat2deskClientId: string | number;
 }
 
 /**

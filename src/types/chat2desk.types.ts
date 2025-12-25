@@ -23,7 +23,16 @@ export interface Chat2DeskMessage {
  * Chat2Desk API response
  */
 export interface Chat2DeskResponse {
-  success: boolean;
+  status: string;
+  data?: {
+    message_id?: number;
+    channel_id?: number;
+    operator_id?: number;
+    transport?: string;
+    type?: string;
+    client_id?: string;
+    dialog_id?: number;
+    request_id?: number;
+  };
   message?: string;
-  data?: unknown;
 }

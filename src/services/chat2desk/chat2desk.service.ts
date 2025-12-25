@@ -7,7 +7,7 @@ import { outboxQueue } from '@/queues';
 export class Chat2DeskService {
   private client: AxiosInstance;
   private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000; // 1 second
+  private readonly RETRY_DELAY = 1000;
 
   constructor() {
     this.client = axios.create({
@@ -15,7 +15,7 @@ export class Chat2DeskService {
       timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.CHAT2DESK_API_TOKEN}`,
+        Authorization: config.CHAT2DESK_API_TOKEN,
       },
     });
   }
@@ -33,7 +33,7 @@ export class Chat2DeskService {
       try {
         const response = await this.client.post<Chat2DeskResponse>('/messages', message);
 
-        if (response.data.success) {
+        if (response.data.status === 'success' || response.status === 200) {
           logger.debug(`Message sent to ${clientId}`);
           return true;
         }
