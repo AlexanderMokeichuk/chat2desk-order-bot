@@ -1,352 +1,352 @@
-# Architecture Guide
+# Architecture Overview
 
-## System Overview
-
+## System Design
 ```
-                                    ┌──────────────┐
-                                    │  Chat2Desk   │
-                                    │   Platform   │
-                                    └──────┬───────┘
-                                           │ Webhook
-                                           ▼
-                                    ┌──────────────┐
-                                    │   Webhook    │
-                                    │    Server    │◄── Health Check
-                                    │ (Bun.serve)  │
-                                    └──────┬───────┘
-                                           │
-                                           ▼
-                                    ┌──────────────┐
-                                    │    Redis     │
-                                    │ Message Queue│
-                                    └──────┬───────┘
-                                           │
-                                           ▼
-                            ┌──────────────┴──────────────┐
-                            │                             │
-                     ┌──────▼───────┐           ┌────────▼────────┐
-                     │   Worker 1   │   ...     │   Worker N      │
-                     │              │           │                 │
-                     └──────┬───────┘           └────────┬────────┘
-                            │                             │
-                            └──────────────┬──────────────┘
-                                           │
-                            ┌──────────────┼──────────────┐
-                            │              │              │
-                     ┌──────▼───────┐ ┌───▼────┐  ┌─────▼──────┐
-                     │    Dialog    │ │  State │  │Chat2Desk   │
-                     │   Handler    │ │  Mgmt  │  │  Service   │
-                     └──────┬───────┘ └───┬────┘  └─────┬──────┘
-                            │              │              │
-                            └──────────────┼──────────────┘
-                                           │
-                                    ┌──────▼───────┐
-                                    │  PostgreSQL  │
-                                    │   Database   │
-                                    └──────────────┘
+┌─────────────────────────────────────────────────────┐
+│                Chat2Desk Order Bot                  │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  Telegram/WhatsApp → Chat2Desk → Webhook Server    │
+│                                        ↓            │
+│                                   RabbitMQ          │
+│                                   (messages)        │
+│                                        ↓            │
+│                                  Worker Pool        │
+│                                   ↙     ↘          │
+│                              Redis    PostgreSQL    │
+│                             (state)   (orders)      │
+│                                   ↘     ↙          │
+│                                 Chat2Desk API       │
+│                                        ↓            │
+│                                Client receives      │
+│                                   response          │
+└─────────────────────────────────────────────────────┘
 ```
 
 ## Components
 
-### 1. Webhook Server (src/server.ts)
+### 1. Webhook Server (`src/server.ts`)
 
-**Technology:** Bun.serve (native HTTP server)
+**Technology:** Bun.serve
 
-**Role:** Receives webhooks from Chat2Desk and responds with 200 OK immediately
+**Role:** Receive webhooks from Chat2Desk
 
 **Endpoints:**
-
 - `POST /webhook/chat2desk` - Receive messages
 - `GET /health` - Health check
-- `GET /` - Server information
+- `GET /` - Server info
 
 **Performance:**
-
 - Response time: 2-5ms
-- Responds to client immediately (doesn't wait for processing)
-- Enqueues message to Redis
+- Responds immediately (async processing)
 
-### 2. Message Queue (src/queues/)
+---
 
-**Technology:** Bull + Redis
+### 2. RabbitMQ Queues
 
-**Role:** Message buffering and distribution between workers
+**Technology:** RabbitMQ 3.13 + amqplib
 
 **Queues:**
 
-- `messages` - Main message queue
-- `outbox` - Failed messages (retry up to 50 times)
+**`messages`** - Main message queue
+- TTL: 24 hours
+- Persistent: Yes
+- Concurrency: 5 workers (prefetch)
 
-**Retry Strategy:**
+**`outbox`** - Retry queue for failed API calls
+- TTL: 7 days
+- Max retries: 50
+- Exponential backoff
 
-- 3 attempts with exponential backoff
-- Stalled job detection (30 sec timeout)
-- Dead Letter Queue for failed jobs
+**`dlq`** - Dead Letter Queue
+- Permanent storage for failed messages
+- For manual investigation
 
-### 3. Workers (src/workers/)
+**Why RabbitMQ:**
+- ✅ Message persistence (survive crashes)
+- ✅ Guaranteed delivery (ack/nack)
+- ✅ Horizontal scaling (multiple workers)
+- ✅ Dead Letter Queue support
 
-**Technology:** Bull processor
+---
 
-**Role:** Process messages from queue
+### 3. Message Worker (`src/workers/`)
 
-**Parameters:**
+**Role:** Process messages from RabbitMQ
 
-- Concurrency: 5 (default, scalable to 50+)
-- Idempotency via Redis (message_id → 7 days TTL)
+**Concurrency:** 5 (configurable via `WORKER_CONCURRENCY`)
 
-**Process:**
-
-1. Fetch message from queue
-2. Check if already processed (idempotency)
+**Process Flow:**
+1. Consume message from `messages` queue
+2. Check idempotency (already processed?)
 3. Pass to Dialog Handler
-4. Mark as processed
+4. Update state in Redis
+5. Send response via Chat2Desk API
+6. Acknowledge message (ack)
 
-### 4. Dialog Handler (src/handlers/)
+**Error Handling:**
+- If processing fails → nack (requeue)
+- If Chat2Desk API fails → move to `outbox` queue
+- After 50 attempts → move to `dlq`
 
-**Role:** Dialog logic with client
+---
 
-**State Machine:**
+### 4. Dialog Handler (`src/handlers/`)
 
+**Role:** Conversation state machine
+
+**States:**
 ```
 INITIAL
-   │
-   ├─ Greeting
-   ▼
+   ↓ Greeting
 WAITING_ADDRESS
-   │
-   ├─ Address validation (min 5 chars)
-   ▼
+   ↓ Validate address (5-200 chars)
 WAITING_PHONE
-   │
-   ├─ Phone validation (international format)
-   ▼
+   ↓ Validate phone (international format)
 WAITING_QUANTITY
-   │
-   ├─ Quantity validation (1-50)
-   ▼
+   ↓ Validate quantity (1-50)
 WAITING_CONFIRMATION
-   │
-   ├─ Show summary
-   ├─ Wait for "Yes"/"No"
-   ▼
+   ↓ Show summary, wait Yes/No
 COMPLETED
-   │
-   └─ Create order in database
+   ↓ Create order in database
 ```
 
-### 5. State Management (src/services/state/)
+**Validation:**
+- Address: 5-200 characters
+- Phone: +996XXXXXXXXX format
+- Quantity: 1-50 items
+
+---
+
+### 5. State Management (`src/services/state/`)
 
 **Technology:** Redis
 
-**Role:** Store dialog state
-
-**Structure:**
-
+**Data Structure:**
 ```typescript
 {
-  clientId: string,
-    state
-:
-  DialogState,
-    data
-:
-  {
-    address ? : string,
-      phone ? : string,
-      quantity ? : number
-  }
-,
-  createdAt: number,
-    updatedAt
-:
-  number
+  clientId: "764015992",
+  state: "WAITING_ADDRESS",
+  data: {
+    address: null,
+    phone: null,
+    quantity: null
+  },
+  createdAt: 1703520000,
+  updatedAt: 1703520010
 }
 ```
 
 **TTL:** 24 hours (auto-cleanup)
 
-### 6. Chat2Desk Service (src/services/chat2desk/)
+**Idempotency:**
+```
+Key: processed:msg_12345
+Value: true
+TTL: 1 hour
+```
+
+**Why Redis:**
+- Fast (sub-millisecond reads)
+- Automatic expiration (TTL)
+- Atomic operations
+
+---
+
+### 6. Chat2Desk Service (`src/services/chat2desk/`)
 
 **Role:** Send messages to clients
 
-**Retry Mechanism:**
-
+**Retry Strategy:**
 - 3 attempts with exponential backoff (1s, 2s, 4s)
 - Timeout: 10 seconds
-- Fallback to Outbox Queue
+- If all fail → move to outbox queue
 
 **Rate Limiting:**
-
 - 300 requests/minute (Chat2Desk limit)
-- Sliding window algorithm
+- Implemented via token bucket algorithm
 
-### 7. Order Service (src/services/order/)
+---
 
-**Role:** Create orders in database
+### 7. Order Service (`src/services/order/`)
 
-**Validation:**
+**Role:** Create orders in PostgreSQL
 
-- Phone: International format with country code
-- Address: 5-200 characters
-- Quantity: 1-50 items
-
-## Data Flow
-
-### 1. Incoming Message
-
-```
-Client → Chat2Desk → Webhook → Queue (1-2ms)
-```
-
-### 2. Processing
-
-```
-Queue → Worker → Dialog Handler → State/Validators (200ms)
+**Database Schema:**
+```sql
+CREATE TABLE orders (
+  id SERIAL PRIMARY KEY,
+  client_phone VARCHAR(20) NOT NULL,
+  delivery_address TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  chat2desk_client_id VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
-### 3. Response to Client
+---
 
+## Message Flow (Detailed)
+
+### Happy Path
 ```
-Dialog Handler → Chat2Desk Service → Chat2Desk → Client
-                      ↓ (if failed)
-                 Outbox Queue
+1. Client sends "Hello" in Telegram
+   ↓
+2. Chat2Desk receives → sends webhook to your server
+   POST /webhook/chat2desk {client_id: "123", text: "Hello"}
+   ↓
+3. Webhook Server queues to RabbitMQ (5ms)
+   ← Responds 200 OK immediately
+   ↓
+4. Worker picks up from RabbitMQ queue
+   ↓
+5. Worker checks Redis: no state found
+   ↓
+6. Worker creates state: INITIAL
+   ↓
+7. Worker sends via Chat2Desk API: "Hello! Please provide address."
+   ↓
+8. Worker updates state: WAITING_ADDRESS
+   ↓
+9. Worker acknowledges message in RabbitMQ (deleted from queue)
 ```
 
-### 4. Order Creation
+### Error Path (Chat2Desk API Down)
+```
+1. Worker tries to send response
+   ↓
+2. Chat2Desk API returns 500
+   ↓
+3. Worker retries (attempt 2) → 500
+   ↓
+4. Worker retries (attempt 3) → 500
+   ↓
+5. Worker adds to outbox queue
+   ↓
+6. Worker acknowledges original message
+   ↓
+7. Outbox Worker retries every 5 minutes
+   ↓
+8. After 50 attempts → moves to DLQ
+```
 
-```
-Dialog Handler → Order Service → PostgreSQL
-```
+---
 
 ## Fault Tolerance
 
-### Level 1: Chat2Desk → Webhook
+### Level 1: RabbitMQ Persistence
+- Messages saved to disk
+- Survive RabbitMQ restart
 
-- Chat2Desk retries up to 5 times
-- Webhook responds within 5 seconds
+### Level 2: Worker Failures
+- Message returns to queue (nack)
+- Another worker picks it up
 
-### Level 2: Redis Queue
-
-- AOF persistence
-- Automatic reconnect
-
-### Level 3: Workers
-
-- Bull retry (3 attempts)
-- Stalled job detection
-- Dead Letter Queue
+### Level 3: Redis State
+- AOF persistence (append-only file)
+- State recovers after Redis restart
 
 ### Level 4: PostgreSQL
-
-- Connection pooling
-- Retry strategy
+- ACID guarantees
+- Connection pooling (20 max, 5 min)
 
 ### Level 5: Chat2Desk API
+- 3 retries + exponential backoff
+- Outbox queue for long-term retry
 
-- 3 retries with exponential backoff
-- Outbox Queue for failed sends
+---
 
 ## Scaling
 
 ### Vertical Scaling
-
-- Increase `WORKER_CONCURRENCY` (up to 50)
+```bash
+# Increase concurrency
+WORKER_CONCURRENCY=20
+```
 
 ### Horizontal Scaling
-
-- Run multiple worker processes
-- All workers use the same Redis queue
-
-**Example:**
-
 ```bash
-# 3 worker processes × 5 concurrency = 15 parallel processing
+# Run multiple worker processes
 pm2 start src/worker.ts -i 3
+# 3 processes × 5 concurrency = 15 parallel workers
 ```
+
+### RabbitMQ Cluster
+For high availability:
+- 3+ RabbitMQ nodes
+- Mirrored queues
+- Load balancer
+
+---
 
 ## Monitoring
 
-### Metrics
+### RabbitMQ Management UI
+- URL: http://localhost:15672
+- Username: `admin`, Password: `password`
+- Monitor queue sizes, message rates
 
-- Queue size (`LLEN bull:messages:wait`)
-- Processing rate
-- Failed jobs count
-- Response time
+### Metrics to Watch
+- `messages` queue size (should be near 0)
+- `outbox` queue size (should be small)
+- `dlq` queue size (should be 0)
+- Message processing rate
+- Worker concurrency utilization
 
-### Health Check
-
+### Logs
 ```bash
-curl http://localhost:3000/health
+# Server logs
+docker logs bot-server
+
+# Worker logs
+docker logs bot-worker
+
+# RabbitMQ logs
+docker logs bot-rabbitmq
 ```
 
-Checks:
-
-- Redis connection
-- PostgreSQL connection
-- Queue size
-
-## Database
-
-### Tables
-
-**orders** - Customer orders
-
-- id, client_phone, delivery_address, quantity
-- source, chat2desk_client_id, status
-- created_at, updated_at
-
-**message_logs** - Message logs (for analytics)
-
-- client_id, message_id, text, dialog_state
-- success, error_reason, timestamp
-
-**dialog_outcomes** - Dialog results
-
-- completed, dropoff_state, total_messages
-- duration_seconds
-
-### Indexes
-
-- `idx_orders_created_at`
-- `idx_orders_status`
-- `idx_orders_chat2desk_client_id`
-
-## Technology Stack
-
-### Runtime & Language
-
-- **Bun** - Fast JavaScript runtime
-- **TypeScript** - Type-safe development
-
-### Infrastructure
-
-- **Redis** - Message queue & state storage
-- **PostgreSQL** - Persistent data storage
-- **Bull** - Queue management
-
-### Key Libraries
-
-- **ioredis** - Redis client
-- **pg** - PostgreSQL client
-- **axios** - HTTP client for Chat2Desk API
-- **winston** - Logging
+---
 
 ## Performance Characteristics
 
 ### Throughput
-
 - 60 messages/second
-- 300+ orders/day capacity
-- Scalable to 3,600+ orders/day with horizontal scaling
+- 300+ orders/day (single worker)
+- 1500+ orders/day (5 workers)
 
 ### Latency
-
 - Webhook response: 2-5ms
 - Message processing: ~200ms
 - Order creation: ~50ms
 
 ### Reliability
-
 - 99.9%+ uptime with proper infrastructure
-- Zero message loss with Redis persistence
-- Automatic retry for failed operations
+- Zero message loss (RabbitMQ persistence)
+- Automatic retry for transient failures
+
+---
+
+## Technology Decisions
+
+### Why RabbitMQ over Bull/Redis?
+- ✅ Industry standard in enterprise
+- ✅ Better for production (used in Shoro company)
+- ✅ More reliable message delivery guarantees
+- ✅ Built-in Dead Letter Queue support
+- ✅ Better observability (Management UI)
+
+### Why Redis for State?
+- ✅ Sub-millisecond read/write
+- ✅ Automatic expiration (TTL)
+- ✅ Simpler than PostgreSQL for temporary data
+
+### Why PostgreSQL for Orders?
+- ✅ ACID transactions
+- ✅ Complex queries (analytics)
+- ✅ Long-term storage
+
+### Why Bun over Node.js?
+- ✅ 3-4x faster startup
+- ✅ Native TypeScript support
+- ✅ Built-in test runner
+- ✅ Faster package manager

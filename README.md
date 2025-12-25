@@ -1,28 +1,15 @@
 # 🤖 Chat2Desk Order Bot
 
-<div align="center">
-
-**Production-ready chatbot for automating order processing via Chat2Desk API**
-
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-1.0+-black.svg)](https://bun.sh/)
-[![Redis](https://img.shields.io/badge/Redis-7.0-red.svg)](https://redis.io/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [Documentation](#-documentation)
-
-</div>
-
----
+Production-ready chatbot for automating order processing via Chat2Desk API with RabbitMQ message queue.
 
 ## 🎯 Features
 
 - ✨ **Automated Order Processing** - Handle customer orders via chat (WhatsApp, Telegram, etc.)
-- 🔄 **State Machine Dialog** - Smart conversation flow with 5 states
+- 🐰 **RabbitMQ Message Queue** - Reliable message delivery with retry mechanisms
+- 🔄 **State Machine Dialog** - Smart conversation flow with validation
 - ✅ **Data Validation** - Address, phone number, and quantity validation
-- 🛡️ **Fault-Tolerant** - Retry mechanisms, idempotency, queue-based architecture
-- ⚡ **High Performance** - 2-5ms response time, 300+ orders/day capacity
+- 🛡️ **Fault-Tolerant** - Retry with exponential backoff, Dead Letter Queue
+- ⚡ **High Performance** - 2-5ms webhook response, scalable workers
 - 📊 **Production Ready** - Graceful shutdown, health checks, comprehensive logging
 
 ## 🚀 Quick Start
@@ -34,6 +21,7 @@
 - [Chat2Desk](https://chat2desk.com/) account with API token
 
 ### Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/AlexanderMokeichuk/chat2desk-order-bot.git
@@ -48,8 +36,9 @@ cp .env.example .env
 ```
 
 ### Running
+
 ```bash
-# Start infrastructure (Redis + PostgreSQL)
+# Start infrastructure (RabbitMQ + Redis + PostgreSQL)
 bun run docker:up
 
 # Terminal 1: Start webhook server
@@ -60,6 +49,7 @@ bun run dev:worker
 ```
 
 ### Testing
+
 ```bash
 # Send test webhook
 curl -X POST http://localhost:3000/webhook/chat2desk \
@@ -72,57 +62,80 @@ curl -X POST http://localhost:3000/webhook/chat2desk \
 
 # Check health
 curl http://localhost:3000/health
+
+# Access RabbitMQ Management UI
+open http://localhost:15672
+# Username: admin, Password: password
 ```
 
 ## 🏗️ Architecture
+
 ```
-Chat2Desk → Webhook Server → Redis Queue → Workers → PostgreSQL
-                                  ↓
-                          State Management (Redis)
+Telegram/WhatsApp
+       ↓
+   Chat2Desk
+       ↓ (webhook)
+  Webhook Server ───→ RabbitMQ (messages queue)
+       ↓                    ↓
+   Health Check        Worker Pool (5 workers)
+                            ↓
+                    ┌───────┼───────┐
+                    ↓       ↓       ↓
+                 Redis  PostgreSQL  Chat2Desk API
+                (state)  (orders)   (send response)
 ```
 
 ### Components
 
 - **Webhook Server** - Receives webhooks from Chat2Desk (Bun.serve, 2-5ms response)
-- **Message Queue** - Buffers messages for processing (Bull + Redis)
-- **Workers** - Processes messages with dialog logic (configurable concurrency)
-- **State Management** - Stores conversation state (Redis, 24h TTL)
+- **RabbitMQ** - Message queue with 3 queues: messages, outbox, dlq
+- **Workers** - Process messages with dialog logic (configurable concurrency)
+- **Redis** - Stores conversation state (24h TTL) and idempotency keys
 - **PostgreSQL** - Persists orders
 
 ### Dialog Flow
+
 ```
-INITIAL → WAITING_ADDRESS → WAITING_PHONE → WAITING_QUANTITY → WAITING_CONFIRMATION → COMPLETED
+INITIAL
+   ↓
+WAITING_ADDRESS → validate address
+   ↓
+WAITING_PHONE → validate phone (international format)
+   ↓
+WAITING_QUANTITY → validate quantity (1-50)
+   ↓
+WAITING_CONFIRMATION → show summary, wait Yes/No
+   ↓
+COMPLETED → create order in database
 ```
 
-Each state validates user input and guides them through the order process.
+## 📊 Tech Stack
 
-## 📊 Performance
-
-- **Response Time:** 2-5ms (webhook endpoint)
-- **Processing Time:** ~200ms per message
-- **Throughput:** 60 msg/sec (300+ orders/day)
-- **Concurrency:** 5 workers (scalable to 50+)
-- **Fault Tolerance:** 3 retries with exponential backoff
+| Component       | Technology         |
+|-----------------|--------------------|
+| Runtime         | Bun 1.0+           |
+| Language        | TypeScript         |
+| Message Queue   | RabbitMQ 3.13      |
+| Cache/State     | Redis 7.0          |
+| Database        | PostgreSQL 15      |
+| API Integration | Chat2Desk REST API |
+| Logging         | Winston            |
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Webhook server port | `3000` |
-| `REDIS_HOST` | Redis hostname | `localhost` |
-| `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
-| `CHAT2DESK_API_TOKEN` | Chat2Desk API token | *required* |
-| `WORKER_CONCURRENCY` | Worker processes | `5` |
-| `LOG_LEVEL` | Logging level | `info` |
+| Variable              | Description             | Default                  |
+|-----------------------|-------------------------|--------------------------|
+| `PORT`                | Webhook server port     | `3000`                   |
+| `RABBITMQ_URL`        | RabbitMQ connection URL | `amqp://localhost:5672/` |
+| `REDIS_HOST`          | Redis hostname          | `localhost`              |
+| `DATABASE_HOST`       | PostgreSQL hostname     | `localhost`              |
+| `CHAT2DESK_API_TOKEN` | Chat2Desk API token     | *required*               |
+| `WORKER_CONCURRENCY`  | Concurrent workers      | `5`                      |
+| `LOG_LEVEL`           | Logging level           | `info`                   |
 
-See [`.env.example`](.env.example) for full list.
-
-## 📚 Documentation
-
-- [Architecture Guide](docs/ARCHITECTURE.md) - Detailed system design & components
-- [API Reference](#api-endpoints) - Available endpoints
+See [`.env.example`](.env.example) for complete list.
 
 ## 📡 API Endpoints
 
@@ -131,6 +144,7 @@ See [`.env.example`](.env.example) for full list.
 Receives webhooks from Chat2Desk.
 
 **Request:**
+
 ```json
 {
   "client_id": "user_123",
@@ -140,6 +154,7 @@ Receives webhooks from Chat2Desk.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true
@@ -151,17 +166,11 @@ Receives webhooks from Chat2Desk.
 Health check endpoint.
 
 **Response:**
+
 ```json
 {
-  "status": "healthy",
-  "checks": {
-    "redis": true,
-    "postgres": true,
-    "queues": {
-      "message": 0,
-      "outbox": 0
-    }
-  }
+  "status": "ok",
+  "timestamp": "2025-12-25T10:00:00.000Z"
 }
 ```
 
@@ -169,53 +178,45 @@ Health check endpoint.
 
 Server information.
 
+## 📚 Documentation
+
+- [Architecture Guide](ARCHITECTURE.md) - Detailed system design
+- [Contributing Guide](CONTRIBUTING.md) - How to contribute
+
 ## 🐛 Troubleshooting
 
 ### Bot not responding
 
 1. Check `CHAT2DESK_API_TOKEN` in `.env`
 2. Verify webhook URL in Chat2Desk settings
-3. Check logs: `docker logs bot-redis`
+3. Check RabbitMQ is running: `docker ps | grep rabbitmq`
+4. Check worker logs for errors
 
-### Connection errors
+### RabbitMQ connection failed
+
 ```bash
-# Restart infrastructure
-bun run docker:down
-bun run docker:up
+# Restart RabbitMQ
+docker restart bot-rabbitmq
+
+# Check RabbitMQ logs
+docker logs bot-rabbitmq
 ```
 
-### Messages not processing
-```bash
-# Check queue size
-docker exec -it bot-redis redis-cli
-> LLEN bull:messages:wait
-```
+### Messages stuck in queue
+
+Access RabbitMQ Management UI at http://localhost:15672:
+
+- Check `messages` queue size
+- Check `outbox` queue for failed sends
+- Check `dlq` for permanently failed messages
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please check out the [Contributing Guide](CONTRIBUTING.md).
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 💰 Support
-
-If you find this project helpful, consider supporting:
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-yellow.svg)](https://www.buymeacoffee.com/YOUR_USERNAME)
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with [Bun](https://bun.sh/) - Fast JavaScript runtime
-- Queue powered by [Bull](https://github.com/OptimalBits/bull)
-- Integrated with [Chat2Desk](https://chat2desk.com/) API
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 👤 Author
 
@@ -226,10 +227,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-<div align="center">
-
 **⭐ Star this repo if you find it useful!**
-
-Made with ❤️ and TypeScript
-
-</div>
