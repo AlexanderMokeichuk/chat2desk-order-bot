@@ -31,7 +31,6 @@
   "dependencies": {
     "amqplib": "^0.10.9",
     "axios": "^1.13.2",
-    "bull": "^4.16.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "ioredis": "^5.8.2",
